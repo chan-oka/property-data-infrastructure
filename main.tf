@@ -17,7 +17,7 @@ resource "google_bigquery_dataset" "property_dataset" {
 resource "google_bigquery_table" "properties" {
   dataset_id = google_bigquery_dataset.property_dataset.dataset_id
   table_id   = "properties"
-  deletion_protection = true
+  deletion_protection = false
 
   time_partitioning {
     type = "DAY"
@@ -251,7 +251,7 @@ resource "google_bigquery_table" "properties" {
 resource "google_bigquery_table" "error_logs" {
   dataset_id = google_bigquery_dataset.property_dataset.dataset_id
   table_id   = "error_logs"
-  deletion_protection = true
+  deletion_protection = false
 
   time_partitioning {
     type = "DAY"
