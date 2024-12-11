@@ -50,7 +50,7 @@ resource "google_bigquery_dataset" "property_dataset" {
   dataset_id                 = "property_data"
   description                = "Dataset for real estate property information"
   location                   = "asia-northeast1"
-  delete_contents_on_destroy = false
+  delete_contents_on_destroy = false  
 }
 
 # BigQuery テーブル - プロパティ情報
@@ -360,4 +360,16 @@ resource "google_cloud_scheduler_job" "property_parser_job" {
     topic_name = google_pubsub_topic.property_emails.id
     data       = base64encode("{}")
   }
+}
+
+resource "google_project_iam_member" "cloudbuild_roles" {
+  for_each = toset([
+    "roles/cloudbuild.builds.builder",
+    "roles/artifactregistry.writer",
+    "roles/secretmanager.secretAccessor"
+  ])
+
+  project = var.project_id
+  role    = each.key
+  member  = "serviceAccount:${var.project_number}-compute@developer.gserviceaccount.com"
 }
