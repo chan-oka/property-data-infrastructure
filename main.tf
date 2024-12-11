@@ -1,6 +1,6 @@
 provider "google" {
-  project = "okamolife"
-  region  = "asia-northeast1"
+  project = var.project_id
+  region  = var.region
 }
 
 # 必要なAPIの有効化
@@ -10,46 +10,50 @@ resource "google_project_service" "required_apis" {
     "cloudscheduler.googleapis.com",
     "pubsub.googleapis.com",
     "iamcredentials.googleapis.com",
-    "sts.googleapis.com"
+    "sts.googleapis.com",
+    "cloudfunctions.googleapis.com",
+    "cloudbuild.googleapis.com",
+    "run.googleapis.com"
   ])
 
-  project                    = "okamolife"
+  project                    = var.project_id
   service                    = each.key
   disable_dependent_services = true
   disable_on_destroy         = false
 }
 
 # Workload Identity Pool
-resource "google_iam_workload_identity_pool" "property_pool" {
-  workload_identity_pool_id = "property-parser-pool"
-  display_name              = "Property Parser Pool"
-  description               = "Identity pool for property parser application"
-}
+# resource "google_iam_workload_identity_pool" "property_pool" {
+#   project                   = var.project_id
+#   workload_identity_pool_id = "property-parser-pool"
+#   display_name              = "Property Parser Pool"
+#   description               = "Identity pool for property parser application"
+# }
 
 # Workload Identity Provider
-resource "google_iam_workload_identity_pool_provider" "property_provider" {
-  workload_identity_pool_id          = google_iam_workload_identity_pool.property_pool.workload_identity_pool_id
-  workload_identity_pool_provider_id = "property-parser-provider"
-  display_name                       = "Property Parser Provider"
+# resource "google_iam_workload_identity_pool_provider" "property_provider" {
+#   workload_identity_pool_id          = google_iam_workload_identity_pool.property_pool.workload_identity_pool_id
+#   workload_identity_pool_provider_id = "property-parser-provider"
+#   display_name                       = "Property Parser Provider"
 
-  attribute_mapping = {
-    "google.subject" = "assertion.sub"
-    "attribute.repository" = "assertion.repository"
-    "attribute.repository_owner" = "assertion.repository_owner"
-  }
+#   attribute_mapping = {
+#     "google.subject" = "assertion.sub"
+#     "attribute.repository" = "assertion.repository"
+#     "attribute.repository_owner" = "assertion.repository_owner"
+#   }
 
-  oidc {
-    issuer_uri = "https://token.actions.githubusercontent.com"
-  }
+#   oidc {
+#     issuer_uri = "https://token.actions.githubusercontent.com"
+#   }
 
-  attribute_condition = "attribute.repository == assertion.repository && attribute.repository_owner == assertion.repository_owner"
-}
+#   attribute_condition = "attribute.repository == assertion.repository && attribute.repository_owner == assertion.repository_owner"
+# }
 
 # BigQuery データセット
 resource "google_bigquery_dataset" "property_dataset" {
   dataset_id                 = "property_data"
   description                = "Dataset for real estate property information"
-  location                   = "asia-northeast1"
+  location                   = var.region
   delete_contents_on_destroy = false  
 }
 
@@ -344,32 +348,26 @@ resource "google_bigquery_table" "error_logs" {
   ])
 }
 
-# Pub/Subトピック
-resource "google_pubsub_topic" "property_emails" {
-  name = "property-emails"
+# Cloud Storage バケット（Cloud Functions用）
+resource "google_storage_bucket" "function_source" {
+  name     = "${var.project_id}-function-source"
+  location = var.region
+  uniform_bucket_level_access = true
 }
 
-# Cloud Scheduler Job
-resource "google_cloud_scheduler_job" "property_parser_job" {
-  depends_on = [google_project_service.required_apis["cloudscheduler.googleapis.com"]]
-  name       = "property-parser-job"
-  schedule   = "*/30 * * * *" # 30分ごと
-  time_zone  = "Asia/Tokyo"
-
-  pubsub_target {
-    topic_name = google_pubsub_topic.property_emails.id
-    data       = base64encode("{}")
-  }
+# Cloud Functions用のサービスアカウント
+resource "google_service_account" "function_identity" {
+  account_id   = "property-parser-identity"
+  display_name = "Property Parser Function Identity"
 }
 
-resource "google_project_iam_member" "cloudbuild_roles" {
+resource "google_project_iam_member" "function_roles" {
   for_each = toset([
-    "roles/cloudbuild.builds.builder",
-    "roles/artifactregistry.writer",
-    "roles/secretmanager.secretAccessor"
+    "roles/bigquery.dataEditor",
+    "roles/aiplatform.user"
   ])
 
   project = var.project_id
   role    = each.key
-  member  = "serviceAccount:${var.project_number}-compute@developer.gserviceaccount.com"
+  member  = "serviceAccount:${google_service_account.function_identity.email}"
 }

@@ -1,6 +1,7 @@
 variable "project_id" {
   description = "GCP Project ID"
   type        = string
+  default     = "okamolife"
 }
 
 variable "region" {
@@ -12,4 +13,5 @@ variable "region" {
 variable "project_number" {
   description = "GCP Project Number"
   type        = string
+  default     = "408609594730"
 }
